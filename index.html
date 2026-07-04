@@ -34,7 +34,7 @@
   /* ===== A4用紙 ===== */
   .sheet {
     width: 210mm; min-height: 297mm;
-    margin: 16px auto; padding: 14mm 15mm 12mm;
+    margin: 16px auto; padding: 9mm 15mm 7mm;
     background: #fff;
     box-shadow: 0 3px 12px rgba(0,0,0,.3);
   }
@@ -43,11 +43,11 @@
     text-align: center; font-size: 24px; font-weight: bold;
     letter-spacing: 4px;
     text-decoration: underline; text-underline-offset: 6px;
-    margin: 4mm 0 12mm;
+    margin: 2mm 0 8mm;
   }
 
   /* 宛名(左) と 発行者(右) */
-  .head { display: flex; justify-content: space-between; margin-bottom: 8mm; }
+  .head { display: flex; justify-content: space-between; margin-bottom: 5mm; }
   .addr-left { font-size: 13px; line-height: 1.7; }
   .addr-left input {
     border: none; background: transparent; font-family: inherit;
@@ -66,7 +66,7 @@
   .addr-right { font-size: 13px; line-height: 1.65; }
   .addr-right .co { font-size: 16px; }
 
-  .regno { font-size: 14px; margin: 0 0 10mm; }
+  .regno { font-size: 14px; margin: 0 0 6mm; }
   .regno b { font-weight: bold; margin-right: 14mm; }
 
   .greeting { font-size: 13.5px; margin-bottom: 4mm; }
@@ -130,7 +130,7 @@
   tr.total .t-lbl { text-align: center; font-size: 14px; letter-spacing: 8px; }
   tr.total .t-amt { text-align: right; padding: 0 5px; font-size: 14px; }
 
-  .footnote { text-align: center; font-size: 13px; margin: 9mm 0 4mm; }
+  .footnote { text-align: center; font-size: 13px; margin: 6mm 0 3mm; }
   .bank {
     width: 88mm; margin: 0 auto;
     border: 3px double #000;
@@ -250,7 +250,7 @@
 
 <script>
 var tbody = document.getElementById('tbody');
-var ROWS_INIT = 18;
+var ROWS_INIT = 15;
 
 /* 宛名テンプレ(ここに追加すれば選択肢が増える) */
 var TEMPLATES = {
@@ -395,7 +395,7 @@ var MM = 96 / 25.4; /* 1mm = 3.7795px */
 function fitForPrint() {
   restoreAfterPrint();
   var rows = Array.prototype.slice.call(tbody.getElementsByTagName('tr'));
-  var budgetMm = ROWS_INIT * 7.4; /* 空行18行分 = 元のフォームの表の高さ */
+  var budgetMm = ROWS_INIT * 7.4; /* 空行15行分 = 表の基準の高さ */
   var heights = rows.map(function (tr) {
     var item = tr.querySelector('.f-item');
     if (!item || !item.value.trim()) return 7.4;
