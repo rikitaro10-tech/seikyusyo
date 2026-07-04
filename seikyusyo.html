@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ご請求書</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #d8d8d8;
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    color: #000;
+  }
+
+  /* ===== 操作バー(印刷されない) ===== */
+  .toolbar {
+    background: #333; color: #fff;
+    padding: 8px 12px;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    font-size: 14px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .toolbar select, .toolbar button {
+    font-size: 14px; padding: 6px 10px; border: none; border-radius: 4px;
+  }
+  .toolbar button { background: #666; color: #fff; cursor: pointer; }
+  .toolbar button:active { background: #888; }
+  .toolbar .print-btn { background: #d4a017; color: #000; font-weight: bold; margin-left: auto; }
+
+  /* ===== A4用紙 ===== */
+  .sheet {
+    width: 210mm; min-height: 297mm;
+    margin: 16px auto; padding: 14mm 15mm 12mm;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(0,0,0,.3);
+  }
+
+  .title {
+    text-align: center; font-size: 24px; font-weight: bold;
+    letter-spacing: 4px;
+    text-decoration: underline; text-underline-offset: 6px;
+    margin: 4mm 0 12mm;
+  }
+
+  /* 宛名(左) と 発行者(右) */
+  .head { display: flex; justify-content: space-between; margin-bottom: 8mm; }
+  .addr-left { font-size: 13px; line-height: 1.7; }
+  .addr-left input {
+    border: none; background: transparent; font-family: inherit;
+    font-size: 13px; padding: 1px 2px;
+  }
+  .addr-left .postal-row { display: flex; align-items: center; gap: 2px; }
+  .addr-left .postal { width: 26mm; }
+  .addr-left .address { width: 72mm; font-size: 13.5px; }
+  .addr-left .name-row {
+    display: flex; align-items: flex-end; gap: 6px;
+    border-bottom: 1.5px solid #000;
+    margin-top: 2mm; padding-bottom: 1px;
+  }
+  .addr-left .cname { width: 62mm; font-size: 16px; }
+  .addr-left .onchu { font-size: 14px; white-space: nowrap; padding-bottom: 1px; }
+  .addr-right { font-size: 13px; line-height: 1.65; }
+  .addr-right .co { font-size: 16px; }
+
+  .regno { font-size: 14px; margin: 0 0 10mm; }
+  .regno b { font-weight: bold; margin-right: 14mm; }
+
+  .greeting { font-size: 13.5px; margin-bottom: 4mm; }
+
+  .grand {
+    display: flex; align-items: flex-end;
+    border-bottom: 2.5px solid #000;
+    padding-bottom: 1.5mm; margin-bottom: 5mm;
+  }
+  .grand .lbl { font-size: 16px; font-weight: bold; white-space: nowrap; }
+  .grand .val { font-size: 20px; font-weight: bold; margin-left: 10mm; min-width: 45mm; }
+  .grand .taxpart { font-size: 14px; margin-left: auto; margin-right: 10mm; white-space: nowrap; }
+
+  /* 明細表 */
+  table.items { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  table.items th, table.items td {
+    border: 1px solid #000; padding: 0; height: 7.4mm; font-size: 13px;
+  }
+  table.items th {
+    font-weight: bold; text-align: center;
+    background: #d9e8d6;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  /* 数量と単位の間はスキャンと同じ破線 */
+  td.qty-cell { border-right: 1px dashed #000 !important; }
+  td.unit-cell { border-left: 1px dashed #000 !important; }
+  th.qty-head { border-right: none; }
+  col.c-date { width: 17%; }
+  col.c-item { width: 27.5%; }
+  col.c-qty  { width: 6.5%; }
+  col.c-unit { width: 4.5%; }
+  col.c-price { width: 12%; }
+  col.c-amt  { width: 15.5%; }
+  col.c-note { width: 11%; }
+  col.c-del  { width: 6%; }
+  table.items input {
+    width: 100%; height: 100%; border: none; background: transparent;
+    font-family: inherit; font-size: 13px; padding: 1px 5px;
+  }
+  table.items input:focus, table.items textarea:focus { outline: 2px solid #7aa0c8; outline-offset: -2px; }
+  textarea.f-item {
+    width: 100%; border: none; background: transparent;
+    font-family: inherit; font-size: 13px; line-height: 1.45;
+    padding: 4px 5px; resize: none; overflow: hidden;
+    display: block; min-height: 7.2mm;
+  }
+  .f-date {
+    text-align: center; font-size: 12px; padding: 1px 0;
+    -webkit-appearance: none; appearance: none;
+  }
+  .f-date::-webkit-calendar-picker-indicator { margin: 0; padding: 0; width: 12px; }
+  .f-date::-webkit-date-and-time-value { text-align: center; }
+  /* 未入力の日付は「年/月/日」の薄字を消す(印刷時に写らないように) */
+  .f-date:invalid::-webkit-datetime-edit { color: transparent; }
+  .f-unitname { text-align: center; font-size: 11px; padding: 1px 0; }
+  .f-qty, .f-price, .f-amt { text-align: right; }
+  tr.total td { height: 8.5mm; font-weight: bold; border-top: 4px double #000; }
+  tr.total .t-lbl { text-align: center; font-size: 14px; letter-spacing: 8px; }
+  tr.total .t-amt { text-align: right; padding: 0 5px; font-size: 14px; }
+
+  .footnote { text-align: center; font-size: 13px; margin: 9mm 0 4mm; }
+  .bank {
+    width: 88mm; margin: 0 auto;
+    border: 3px double #000;
+    padding: 2.5mm 5mm; font-size: 14px; line-height: 1.9;
+  }
+
+  .del {
+    width: 100%; height: 100%; border: none; background: #fbe9e9;
+    color: #c33; cursor: pointer; font-size: 12px;
+  }
+  th.del-col, td.del-col { border: none !important; background: transparent; }
+  @media (max-width: 800px) { .sheet { width: 100%; padding: 4mm; } }
+
+  /* ===== 印刷 ===== */
+  @page { size: A4; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .toolbar, .del-col, .del { display: none !important; }
+    .sheet { margin: 0; box-shadow: none; width: 210mm; }
+    input::placeholder { color: transparent; }
+    .f-date::-webkit-calendar-picker-indicator { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <select id="clientTpl">
+    <option value="">宛名テンプレを選択</option>
+    <option value="matsumoto">（株）松本工務店</option>
+    <option value="moriya">（株）モリヤ</option>
+  </select>
+  <select id="taxMode">
+    <option value="excl10">消費税: 外税10%</option>
+    <option value="incl10">消費税: 内税10%</option>
+    <option value="excl8">消費税: 外税8%</option>
+    <option value="manual">消費税: 手入力</option>
+  </select>
+  <button type="button" id="addRow">＋行追加</button>
+  <button type="button" id="clearAll">クリア</button>
+  <button type="button" id="doPrint" class="print-btn">印刷 / PDF保存</button>
+</div>
+
+<div class="sheet">
+  <div class="title">ご請求書</div>
+
+  <div class="head">
+    <div class="addr-left">
+      <div class="postal-row">〒<input type="text" inputmode="numeric" class="postal" id="cPostal" placeholder="140-0013"></div>
+      <div><input type="text" class="address" id="cAddress" placeholder="住所"></div>
+      <div class="name-row">
+        <input type="text" class="cname" id="cName" placeholder="宛名">
+        <span class="onchu">御中</span>
+      </div>
+    </div>
+    <div class="addr-right">
+      <div class="co">JUNインテリア</div>
+      <div>〒230-0051</div>
+      <div>横浜市鶴見区鶴見中央2-13-14-502</div>
+      <div>TEL&amp;FAX: 045-503-5875</div>
+    </div>
+  </div>
+
+  <div class="regno"><b>登録番号</b>T5810746627298</div>
+
+  <div class="greeting">下記のとおりご請求申し上げます。</div>
+
+  <div class="grand">
+    <span class="lbl">税込合計金額</span>
+    <span class="val" id="grand">&nbsp;</span>
+    <span class="taxpart">（消費税　<span id="taxWrap"><span id="tax">&nbsp;</span></span>）</span>
+  </div>
+
+  <table class="items">
+    <colgroup>
+      <col class="c-date"><col class="c-item"><col class="c-qty"><col class="c-unit">
+      <col class="c-price"><col class="c-amt"><col class="c-note"><col class="c-del">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>日付</th><th>品目</th><th colspan="2" class="qty-head">数量</th><th>単価</th><th>金額</th><th>備考</th><th class="del-col"></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+    <tfoot>
+      <tr class="total">
+        <td colspan="2" class="t-lbl">合計</td>
+        <td class="qty-cell"></td><td class="unit-cell"></td><td></td>
+        <td class="t-amt" id="subtotal"></td>
+        <td></td><td class="del-col"></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <datalist id="unitList">
+    <option value="㎡"><option value="式"><option value="個"><option value="本">
+    <option value="枚"><option value="m"><option value="セット"><option value="台"><option value="箇所">
+  </datalist>
+
+  <div class="footnote">お手数ですが、下記口座へお振込みいただきますようお願い申し上げます。</div>
+  <div class="bank">
+    振込先：横浜銀行　緑園都市支店<br>
+    　（普通）　1139957<br>
+    　　飴田　純
+  </div>
+</div>
+
+<script>
+var tbody = document.getElementById('tbody');
+var ROWS_INIT = 18;
+
+/* 宛名テンプレ(ここに追加すれば選択肢が増える) */
+var TEMPLATES = {
+  matsumoto: { postal: '140-0013', address: '品川区南大井1-3-5', name: '（株）松本工務店' },
+  moriya: { postal: '234-0055', address: '横浜市港南区日野南5-9-17イディアル港南台1F', name: '（株）モリヤ' }
+};
+
+function comma(n) {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+function num(s) {
+  if (s == null) return NaN;
+  s = String(s).replace(/[,，¥￥\s]/g, '');
+  if (s === '') return NaN;
+  return Number(s);
+}
+
+function addRow() {
+  var tr = document.createElement('tr');
+  tr.innerHTML =
+    '<td><input type="date" class="f-date" required></td>' +
+    '<td><textarea class="f-item" rows="1"></textarea></td>' +
+    '<td class="qty-cell"><input type="text" inputmode="decimal" class="f-qty"></td>' +
+    '<td class="unit-cell"><input type="text" class="f-unitname" list="unitList"></td>' +
+    '<td><input type="text" inputmode="numeric" class="f-price"></td>' +
+    '<td><input type="text" inputmode="numeric" class="f-amt"></td>' +
+    '<td><input type="text" class="f-note"></td>' +
+    '<td class="del-col"><button type="button" class="del">✕</button></td>';
+  tbody.appendChild(tr);
+}
+
+function recalc() {
+  var sum = 0;
+  var rows = tbody.getElementsByTagName('tr');
+  for (var i = 0; i < rows.length; i++) {
+    var a = num(rows[i].querySelector('.f-amt').value);
+    if (!isNaN(a)) sum += a;
+  }
+  var mode = document.getElementById('taxMode').value;
+  var tax = 0, grand = sum;
+  if (mode === 'excl10') { tax = Math.floor(sum * 0.10); grand = sum + tax; }
+  else if (mode === 'excl8') { tax = Math.floor(sum * 0.08); grand = sum + tax; }
+  else if (mode === 'incl10') { tax = Math.floor(sum * 10 / 110); grand = sum; }
+  else {
+    var tEl = document.getElementById('taxManual');
+    var t = num(tEl && tEl.value);
+    tax = isNaN(t) ? 0 : t;
+    grand = sum + tax;
+  }
+  document.getElementById('subtotal').textContent = sum ? comma(sum) : '';
+  document.getElementById('grand').textContent = sum ? '¥' + comma(grand) : '';
+  if (mode !== 'manual') {
+    document.getElementById('taxWrap').innerHTML = '<span id="tax">' + (sum ? '¥' + comma(tax) : '&nbsp;') + '</span>';
+  }
+}
+
+function setTaxManualUI() {
+  var mode = document.getElementById('taxMode').value;
+  var wrap = document.getElementById('taxWrap');
+  if (mode === 'manual') {
+    wrap.innerHTML = '<input type="text" inputmode="numeric" id="taxManual" style="width:26mm;border:none;border-bottom:1px solid #000;font-family:inherit;font-size:14px;text-align:right;background:transparent;">';
+    document.getElementById('taxManual').addEventListener('input', recalc);
+  }
+  recalc();
+}
+
+/* 入力のたびに再計算。数量×単価が揃えば金額を自動入力 */
+tbody.addEventListener('input', function (e) {
+  var t = e.target;
+  if (t.className === 'f-item') {
+    t.style.height = 'auto';
+    t.style.height = t.scrollHeight + 'px';
+  }
+  var tr = t.closest ? t.closest('tr') : t.parentNode.parentNode;
+  if (t.className === 'f-qty' || t.className === 'f-price') {
+    var q = num(tr.querySelector('.f-qty').value);
+    var u = num(tr.querySelector('.f-price').value);
+    if (!isNaN(q) && !isNaN(u)) {
+      tr.querySelector('.f-amt').value = comma(Math.round(q * u));
+    }
+  }
+  recalc();
+});
+
+/* 金額・単価はフォーカスが外れたらカンマ整形 */
+tbody.addEventListener('blur', function (e) {
+  var t = e.target;
+  if (t.className === 'f-amt' || t.className === 'f-price') {
+    var v = num(t.value);
+    if (!isNaN(v)) t.value = comma(v);
+  }
+}, true);
+
+/* 行削除 */
+tbody.addEventListener('click', function (e) {
+  if (e.target.className === 'del') {
+    if (tbody.getElementsByTagName('tr').length > 1) {
+      var tr = e.target.closest ? e.target.closest('tr') : e.target.parentNode.parentNode;
+      tr.parentNode.removeChild(tr);
+      recalc();
+    }
+  }
+});
+
+/* 宛名テンプレ */
+document.getElementById('clientTpl').addEventListener('change', function () {
+  var t = TEMPLATES[this.value];
+  if (!t) return;
+  document.getElementById('cPostal').value = t.postal;
+  document.getElementById('cAddress').value = t.address;
+  document.getElementById('cName').value = t.name;
+});
+
+document.getElementById('addRow').addEventListener('click', function () { addRow(); });
+document.getElementById('doPrint').addEventListener('click', function () { window.print(); });
+
+/* クリア: 2回タップ方式 */
+var clearBtn = document.getElementById('clearAll');
+var clearArmed = false, clearTimer = null;
+clearBtn.addEventListener('click', function () {
+  if (!clearArmed) {
+    clearArmed = true;
+    clearBtn.textContent = 'もう一度押すと消去';
+    clearBtn.style.background = '#c0392b';
+    clearTimer = setTimeout(function () {
+      clearArmed = false;
+      clearBtn.textContent = 'クリア';
+      clearBtn.style.background = '';
+    }, 3000);
+    return;
+  }
+  clearTimeout(clearTimer);
+  clearArmed = false;
+  clearBtn.textContent = 'クリア';
+  clearBtn.style.background = '';
+  document.getElementById('cPostal').value = '';
+  document.getElementById('cAddress').value = '';
+  document.getElementById('cName').value = '';
+  document.getElementById('clientTpl').value = '';
+  tbody.innerHTML = '';
+  for (var i = 0; i < ROWS_INIT; i++) addRow();
+  recalc();
+});
+
+document.getElementById('taxMode').addEventListener('change', setTaxManualUI);
+
+for (var i = 0; i < ROWS_INIT; i++) addRow();
+recalc();
+</script>
+</body>
+</html>
