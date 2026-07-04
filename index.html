@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no">
 <title>ご請求書</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   a, a:visited { color: #000 !important; text-decoration: none !important; }
@@ -144,6 +146,14 @@
   th.del-col, td.del-col { border: none !important; background: transparent; }
   @media (max-width: 800px) { .sheet { width: 100%; padding: 4mm; } }
 
+  /* ===== PDF生成用スナップショット ===== */
+  #pdfStage { position: fixed; left: -12000px; top: 0; }
+  .pdfmode { margin: 0 !important; box-shadow: none !important; width: 794px !important; min-height: 1123px !important; }
+  .pdfmode .del, .pdfmode .del-col { display: none !important; }
+  .pdfmode col.c-del { width: 0 !important; }
+  .pdfmode tr.hide-print { display: none !important; }
+  .pdfmode .fval { font-family: inherit; white-space: pre-wrap; word-break: break-all; width: 100%; }
+
   /* ===== 印刷 ===== */
   @page { size: A4; margin: 0; }
   @media print {
@@ -181,7 +191,8 @@
   </select>
   <button type="button" id="addRow">＋行追加</button>
   <button type="button" id="clearAll">クリア</button>
-  <button type="button" id="doPrint" class="print-btn">印刷 / PDF保存</button>
+  <button type="button" id="doPdf" class="print-btn">PDF作成(推奨)</button>
+  <button type="button" id="doPrint">直接印刷</button>
 </div>
 
 <div class="sheet">
@@ -418,6 +429,73 @@ function restoreAfterPrint() {
 }
 
 window.addEventListener('afterprint', restoreAfterPrint);
+
+/* ===== ボタン一つでクリーンなPDFを作る ===== */
+function buildSnapshot() {
+  var src = document.querySelector('.sheet');
+  var clone = src.cloneNode(true);
+  clone.classList.add('pdfmode');
+  var srcFields = src.querySelectorAll('input, textarea');
+  var cloneFields = clone.querySelectorAll('input, textarea');
+  for (var i = 0; i < srcFields.length; i++) {
+    var f = srcFields[i], c = cloneFields[i];
+    var v = f.value || '';
+    if (f.classList.contains('f-date') && v) {
+      var p = v.split('-');
+      v = p[0] + '/' + p[1] + '/' + p[2];
+    }
+    var d = document.createElement('div');
+    d.className = 'fval';
+    d.textContent = v;
+    var cs = window.getComputedStyle(f);
+    d.style.fontSize = cs.fontSize;
+    d.style.textAlign = cs.textAlign;
+    d.style.padding = cs.padding;
+    if (f.classList.contains('f-item')) d.style.lineHeight = '1.45';
+    c.parentNode.replaceChild(d, c);
+  }
+  var junk = clone.querySelectorAll('.p-item');
+  for (var j = 0; j < junk.length; j++) junk[j].parentNode.removeChild(junk[j]);
+  return clone;
+}
+
+function makePdf() {
+  var btn = document.getElementById('doPdf');
+  btn.textContent = 'PDF作成中…';
+  btn.disabled = true;
+  fitForPrint();
+  var stage = document.getElementById('pdfStage');
+  if (!stage) {
+    stage = document.createElement('div');
+    stage.id = 'pdfStage';
+    document.body.appendChild(stage);
+  }
+  stage.innerHTML = '';
+  var snap = buildSnapshot();
+  stage.appendChild(snap);
+  restoreAfterPrint();
+
+  html2canvas(snap, { scale: 2.5, backgroundColor: '#ffffff', logging: false })
+    .then(function (canvas) {
+      var pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+      var img = canvas.toDataURL('image/jpeg', 0.92);
+      var hMm = canvas.height * 210 / canvas.width;
+      pdf.addImage(img, 'JPEG', 0, 0, 210, Math.min(hMm, 297));
+      var name = (document.getElementById('cName').value || '請求書').replace(/[\\/:*?"<>|]/g, '');
+      pdf.save('請求書_' + name + '.pdf');
+      stage.innerHTML = '';
+      btn.textContent = 'PDF作成(推奨)';
+      btn.disabled = false;
+    })
+    .catch(function (err) {
+      stage.innerHTML = '';
+      btn.textContent = 'PDF作成(推奨)';
+      btn.disabled = false;
+      alert('PDF作成に失敗しました。通信環境を確認してもう一度お試しください。');
+    });
+}
+
+document.getElementById('doPdf').addEventListener('click', makePdf);
 
 document.getElementById('doPrint').addEventListener('click', function () {
   fitForPrint();
