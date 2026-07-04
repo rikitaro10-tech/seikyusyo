@@ -3,9 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no">
 <title>ご請求書</title>
 <style>
   * { box-sizing: border-box; }
+  a, a:visited { color: #000 !important; text-decoration: none !important; }
+  input, textarea { color: #000; -webkit-text-fill-color: #000; }
   html, body { margin: 0; padding: 0; }
   body {
     background: #d8d8d8;
@@ -110,10 +113,13 @@
     padding: 4px 5px; resize: none; overflow: hidden;
     display: block; min-height: 7.2mm;
   }
+  .p-item { display: none; }
   .f-date {
     text-align: center; font-size: 12px; padding: 1px 0;
     -webkit-appearance: none; appearance: none;
+    color: #000;
   }
+  .f-date::-webkit-date-and-time-value { color: #000; }
   .f-date::-webkit-calendar-picker-indicator { margin: 0; padding: 0; width: 12px; }
   .f-date::-webkit-date-and-time-value { text-align: center; }
   /* 未入力の日付は「年/月/日」の薄字を消す(印刷時に写らないように) */
@@ -143,9 +149,19 @@
   @media print {
     body { background: #fff; }
     .toolbar, .del-col, .del { display: none !important; }
-    .sheet { margin: 0; box-shadow: none; width: 210mm; }
+    .sheet { margin: 0; box-shadow: none; width: 210mm; min-height: 0; }
     input::placeholder { color: transparent; }
     .f-date::-webkit-calendar-picker-indicator { display: none; }
+    /* 品目はtextareaの代わりに折り返しdivで印刷(高さが正確に出る) */
+    textarea.f-item { display: none; }
+    .p-item {
+      display: block; font-size: 13px; line-height: 1.45;
+      padding: 4px 5px; white-space: pre-wrap; word-break: break-all;
+    }
+    /* 行の途中で改ページしない・振込先は footnote と一緒に */
+    table.items tr { break-inside: avoid; page-break-inside: avoid; }
+    .footnote, .bank { break-inside: avoid; page-break-inside: avoid; }
+    tr.hide-print { display: none !important; }
   }
 </style>
 </head>
@@ -256,7 +272,7 @@ function addRow() {
   var tr = document.createElement('tr');
   tr.innerHTML =
     '<td><input type="date" class="f-date" required></td>' +
-    '<td><textarea class="f-item" rows="1"></textarea></td>' +
+    '<td><textarea class="f-item" rows="1"></textarea><div class="p-item"></div></td>' +
     '<td class="qty-cell"><input type="text" inputmode="decimal" class="f-qty"></td>' +
     '<td class="unit-cell"><input type="text" class="f-unitname" list="unitList"></td>' +
     '<td><input type="text" inputmode="numeric" class="f-price"></td>' +
@@ -307,6 +323,8 @@ tbody.addEventListener('input', function (e) {
   if (t.className === 'f-item') {
     t.style.height = 'auto';
     t.style.height = t.scrollHeight + 'px';
+    var p = t.parentNode.querySelector('.p-item');
+    if (p) p.textContent = t.value;
   }
   var tr = t.closest ? t.closest('tr') : t.parentNode.parentNode;
   if (t.className === 'f-qty' || t.className === 'f-price') {
@@ -349,7 +367,62 @@ document.getElementById('clientTpl').addEventListener('change', function () {
 });
 
 document.getElementById('addRow').addEventListener('click', function () { addRow(); });
-document.getElementById('doPrint').addEventListener('click', function () { window.print(); });
+
+/* ===== 1ページに収める処理 ===== */
+/* 品目の印刷時の高さを測るための隠し測定ボックス */
+function measureItemHeightPx(text) {
+  var m = document.getElementById('measureBox');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'measureBox';
+    m.style.cssText = 'position:absolute;left:-9999px;top:0;width:177px;font-size:13px;line-height:1.45;padding:4px 5px;white-space:pre-wrap;word-break:break-all;font-family:inherit;visibility:hidden;';
+    document.body.appendChild(m);
+  }
+  m.textContent = text || ' ';
+  return m.offsetHeight;
+}
+
+function rowIsEmpty(tr) {
+  var fields = tr.querySelectorAll('input, textarea');
+  for (var i = 0; i < fields.length; i++) {
+    if (fields[i].value && String(fields[i].value).trim() !== '') return false;
+  }
+  return true;
+}
+
+var MM = 96 / 25.4; /* 1mm = 3.7795px */
+
+function fitForPrint() {
+  restoreAfterPrint();
+  var rows = Array.prototype.slice.call(tbody.getElementsByTagName('tr'));
+  var budgetMm = ROWS_INIT * 7.4; /* 空行18行分 = 元のフォームの表の高さ */
+  var heights = rows.map(function (tr) {
+    var item = tr.querySelector('.f-item');
+    if (!item || !item.value.trim()) return 7.4;
+    var px = measureItemHeightPx(item.value);
+    return Math.max(7.4, px / MM + 0.6);
+  });
+  var total = heights.reduce(function (a, b) { return a + b; }, 0);
+  /* 後ろの空行から順に非表示にして収める */
+  for (var i = rows.length - 1; i >= 0 && total > budgetMm + 0.5; i--) {
+    if (rowIsEmpty(rows[i])) {
+      rows[i].classList.add('hide-print');
+      total -= heights[i];
+    }
+  }
+}
+
+function restoreAfterPrint() {
+  var hidden = tbody.querySelectorAll('tr.hide-print');
+  for (var i = 0; i < hidden.length; i++) hidden[i].classList.remove('hide-print');
+}
+
+window.addEventListener('afterprint', restoreAfterPrint);
+
+document.getElementById('doPrint').addEventListener('click', function () {
+  fitForPrint();
+  window.print();
+});
 
 /* クリア: 2回タップ方式 */
 var clearBtn = document.getElementById('clearAll');
